@@ -1,15 +1,125 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:image/image.dart' as img;
-import 'package:geolocator/geolocator.dart';
 import '../model/entity.dart';
-import '../model/api_service.dart';
-import '../model/database_helper.dart';
 import '../modelView/location_service.dart';
+import '../modelView/entity_manager.dart';
+import '../modelView/image_manager.dart';
+
+// Custom memory-efficient image widget
+class MemoryEfficientImage extends StatefulWidget {
+  final File imageFile;
+  final double height;
+  final BoxFit fit;
+
+  const MemoryEfficientImage({
+    super.key,
+    required this.imageFile,
+    this.height = 200,
+    this.fit = BoxFit.cover,
+  });
+
+  @override
+  State<MemoryEfficientImage> createState() => _MemoryEfficientImageState();
+}
+
+class _MemoryEfficientImageState extends State<MemoryEfficientImage> {
+  Uint8List? _imageBytes;
+  bool _isLoading = true;
+  bool _hasError = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadImageBytes();
+  }
+
+  Future<void> _loadImageBytes() async {
+    try {
+      if (await widget.imageFile.exists()) {
+        final bytes = await widget.imageFile.readAsBytes();
+        if (mounted) {
+          setState(() {
+            _imageBytes = bytes;
+            _isLoading = false;
+            _hasError = false;
+          });
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+            _hasError = true;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _hasError = true;
+        });
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _imageBytes = null; // Release memory
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: widget.height,
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.grey[300],
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: _isLoading
+            ? Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 8),
+                    Text('Loading...', style: TextStyle(color: Colors.grey[600])),
+                  ],
+                ),
+              )
+            : _hasError || _imageBytes == null
+                ? Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.error, size: 50, color: Colors.grey[600]),
+                      Text('Failed to load image', style: TextStyle(color: Colors.grey[600])),
+                    ],
+                  )
+                : Image.memory(
+                    _imageBytes!,
+                    fit: widget.fit,
+                    cacheWidth: 200, // Minimal cache
+                    cacheHeight: 150,
+                    gaplessPlayback: true,
+                    errorBuilder: (context, error, stackTrace) => Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.error, size: 50, color: Colors.grey[600]),
+                        Text('Error displaying image', style: TextStyle(color: Colors.grey[600])),
+                      ],
+                    ),
+                  ),
+      ),
+    );
+  }
+}
 
 class EntityForm extends StatefulWidget {
-  final Entity? entity; // null for create, entity for edit
+  final Entity? entity;
 
   const EntityForm({super.key, this.entity});
 
@@ -23,11 +133,12 @@ class _EntityFormState extends State<EntityForm> {
   final _latController = TextEditingController();
   final _lonController = TextEditingController();
   
-  final ApiService _apiService = ApiService();
-  final DatabaseHelper _databaseHelper = DatabaseHelper();
+  final EntityManager _entityManager = EntityManager();
   final LocationService _locationService = LocationService();
+  final ImageManager _imageManager = ImageManager();
   
   File? _imageFile;
+  File? _previousImageFile; // Keep track for cleanup
   bool _isLoading = false;
   bool _isEdit = false;
 
@@ -73,19 +184,16 @@ class _EntityFormState extends State<EntityForm> {
 
   Future<void> _pickImage() async {
     try {
-      final ImagePicker picker = ImagePicker();
-      final XFile? image = await picker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 800,
-        maxHeight: 600,
-        imageQuality: 85,
-      );
-
-      if (image != null) {
-        File imageFile = File(image.path);
-        File resizedImage = await _resizeImage(imageFile);
+      final imageFile = await _imageManager.pickImageFromGallery();
+      if (imageFile != null) {
+        // Clean up previous image file
+        if (_previousImageFile != null) {
+          await _imageManager.cleanupTempFiles(_previousImageFile);
+        }
+        
         setState(() {
-          _imageFile = resizedImage;
+          _previousImageFile = _imageFile;
+          _imageFile = imageFile;
         });
       }
     } catch (e) {
@@ -99,19 +207,16 @@ class _EntityFormState extends State<EntityForm> {
 
   Future<void> _takePhoto() async {
     try {
-      final ImagePicker picker = ImagePicker();
-      final XFile? image = await picker.pickImage(
-        source: ImageSource.camera,
-        maxWidth: 800,
-        maxHeight: 600,
-        imageQuality: 85,
-      );
-
-      if (image != null) {
-        File imageFile = File(image.path);
-        File resizedImage = await _resizeImage(imageFile);
+      final imageFile = await _imageManager.takePhoto();
+      if (imageFile != null) {
+        // Clean up previous image file
+        if (_previousImageFile != null) {
+          await _imageManager.cleanupTempFiles(_previousImageFile);
+        }
+        
         setState(() {
-          _imageFile = resizedImage;
+          _previousImageFile = _imageFile;
+          _imageFile = imageFile;
         });
       }
     } catch (e) {
@@ -123,56 +228,36 @@ class _EntityFormState extends State<EntityForm> {
     }
   }
 
-  Future<File> _resizeImage(File imageFile) async {
-    final bytes = await imageFile.readAsBytes();
-    final originalImage = img.decodeImage(bytes);
-    
-    if (originalImage != null) {
-      final resizedImage = img.copyResize(originalImage, width: 800, height: 600);
-      final resizedBytes = img.encodeJpg(resizedImage, quality: 85);
-      
-      final resizedFile = File('${imageFile.path}_resized.jpg');
-      await resizedFile.writeAsBytes(resizedBytes);
-      return resizedFile;
-    }
-    
-    return imageFile;
-  }
-
   void _showImageSourceDialog() {
     showDialog(
       context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Select Image Source'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              ListTile(
-                leading: const Icon(Icons.photo_library),
-                title: const Text('Gallery'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _pickImage();
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.camera_alt),
-                title: const Text('Camera'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _takePhoto();
-                },
-              ),
-            ],
-          ),
-        );
-      },
+      builder: (context) => AlertDialog(
+        title: Text('Select Image Source'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              title: Text('Gallery'),
+              onTap: () {
+                Navigator.pop(context);
+                _pickImage();
+              },
+            ),
+            ListTile(
+              title: Text('Camera'),
+              onTap: () {
+                Navigator.pop(context);
+                _takePhoto();
+              },
+            ),
+          ],
+        ),
+      ),
     );
   }
 
   Future<void> _submitForm() async {
-    if (!_formKey.currentState!.validate()) {
+    if (!_formKey.currentState!.validate() || _isLoading) {
       return;
     }
 
@@ -185,70 +270,45 @@ class _EntityFormState extends State<EntityForm> {
       final lat = double.parse(_latController.text);
       final lon = double.parse(_lonController.text);
 
+      bool success;
       if (_isEdit) {
-        // Update existing entity
-        final result = await _apiService.updateEntity(
+        success = await _entityManager.updateEntity(
           id: widget.entity!.id!,
           title: title,
           lat: lat,
           lon: lon,
           imageFile: _imageFile,
+          currentImage: widget.entity!.image,
         );
-
-        if (result != null) {
-          // Update in local database
-          final updatedEntity = widget.entity!.copyWith(
-            title: title,
-            lat: lat,
-            lon: lon,
-            image: _imageFile != null ? 'updated_image_path' : widget.entity!.image,
-          );
-          await _databaseHelper.updateEntity(updatedEntity);
-
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Entity updated successfully')),
-            );
-            Navigator.pop(context, true);
-          }
-        } else {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Failed to update entity')),
-            );
-          }
-        }
       } else {
-        // Create new entity
-        final result = await _apiService.createEntity(
+        success = await _entityManager.createEntity(
           title: title,
           lat: lat,
           lon: lon,
           imageFile: _imageFile,
         );
+      }
 
-        if (result != null) {
-          // Save to local database
-          final newEntity = Entity(
-            title: title,
-            lat: lat,
-            lon: lon,
-            image: 'created_image_path', // This would be updated with actual path from API
+      if (mounted) {
+        if (success) {
+          // Clean up image files after successful submission
+          if (_imageFile != null) {
+            _imageManager.cleanupTempFiles(_imageFile);
+            _imageFile = null;
+          }
+          if (_previousImageFile != null) {
+            _imageManager.cleanupTempFiles(_previousImageFile);
+            _previousImageFile = null;
+          }
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(_isEdit ? 'Entity updated successfully' : 'Entity created successfully')),
           );
-          await _databaseHelper.insertEntity(newEntity);
-
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Entity created successfully')),
-            );
-            Navigator.pop(context, true);
-          }
+          Navigator.pop(context, true);
         } else {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Failed to create entity')),
-            );
-          }
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(_isEdit ? 'Failed to update entity' : 'Failed to create entity')),
+          );
         }
       }
     } catch (e) {
@@ -258,42 +318,26 @@ class _EntityFormState extends State<EntityForm> {
         );
       }
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(_isEdit ? 'Edit Entity' : 'Create Entity'),
-        actions: [
-          if (_isLoading)
-            const Padding(
-              padding: EdgeInsets.all(16.0),
-              child: SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            ),
-        ],
-      ),
+      appBar: AppBar(title: Text(_isEdit ? 'Edit' : 'Create')),
       body: Form(
         key: _formKey,
         child: ListView(
-          padding: const EdgeInsets.all(16.0),
+          padding: EdgeInsets.all(16.0),
           children: [
-            // Title field
             TextFormField(
               controller: _titleController,
-              decoration: const InputDecoration(
-                labelText: 'Title',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.title),
-              ),
+              decoration: InputDecoration(labelText: 'Title'),
               validator: (value) {
                 if (value == null || value.trim().isEmpty) {
                   return 'Please enter a title';
@@ -301,20 +345,14 @@ class _EntityFormState extends State<EntityForm> {
                 return null;
               },
             ),
-            const SizedBox(height: 16),
-
-            // Location fields
+            SizedBox(height: 16),
             Row(
               children: [
                 Expanded(
                   child: TextFormField(
                     controller: _latController,
-                    decoration: const InputDecoration(
-                      labelText: 'Latitude',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.location_on),
-                    ),
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: InputDecoration(labelText: 'Latitude'),
+                    keyboardType: TextInputType.numberWithOptions(decimal: true),
                     validator: (value) {
                       if (value == null || value.trim().isEmpty) {
                         return 'Required';
@@ -326,16 +364,12 @@ class _EntityFormState extends State<EntityForm> {
                     },
                   ),
                 ),
-                const SizedBox(width: 8),
+                SizedBox(width: 8),
                 Expanded(
                   child: TextFormField(
                     controller: _lonController,
-                    decoration: const InputDecoration(
-                      labelText: 'Longitude',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.location_on),
-                    ),
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: InputDecoration(labelText: 'Longitude'),
+                    keyboardType: TextInputType.numberWithOptions(decimal: true),
                     validator: (value) {
                       if (value == null || value.trim().isEmpty) {
                         return 'Required';
@@ -349,105 +383,68 @@ class _EntityFormState extends State<EntityForm> {
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-
-            // Get current location button
-            ElevatedButton.icon(
+            SizedBox(height: 8),
+            ElevatedButton(
               onPressed: _isLoading ? null : _getCurrentLocation,
-              icon: const Icon(Icons.my_location),
-              label: const Text('Use Current Location'),
+              child: Text('Use Current Location'),
             ),
-            const SizedBox(height: 16),
-
-            // Image section
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Image',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            SizedBox(height: 16),
+            if (_imageFile != null)
+              MemoryEfficientImage(imageFile: _imageFile!)
+            else if (_isEdit && widget.entity!.image != null)
+              Container(
+                height: 200,
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.network(
+                    widget.entity!.getFullImageUrl()!,
+                    fit: BoxFit.cover,
+                    cacheWidth: 150, // Minimal cache
+                    cacheHeight: 113,
+                    errorBuilder: (context, error, stackTrace) => Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.error, size: 50, color: Colors.grey[600]),
+                        Text('Failed to load image', style: TextStyle(color: Colors.grey[600])),
+                      ],
                     ),
-                    const SizedBox(height: 8),
-                    if (_imageFile != null)
-                      Container(
-                        width: double.infinity,
+                    loadingBuilder: (context, child, loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return Container(
                         height: 200,
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: Image.file(
-                            _imageFile!,
-                            fit: BoxFit.cover,
-                          ),
-                        ),
-                      )
-                    else if (_isEdit && widget.entity!.image != null)
-                      Container(
-                        width: double.infinity,
-                        height: 200,
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: Image.network(
-                            widget.entity!.getFullImageUrl()!,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) {
-                              return const Center(
-                                child: Icon(Icons.error, size: 50),
-                              );
-                            },
-                          ),
-                        ),
-                      )
-                    else
-                      Container(
-                        width: double.infinity,
-                        height: 200,
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Center(
+                        color: Colors.grey[300],
+                        child: Center(
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.image, size: 50, color: Colors.grey),
-                              Text('No image selected'),
+                              CircularProgressIndicator(),
+                              SizedBox(height: 8),
+                              Text('Loading image...', style: TextStyle(color: Colors.grey[600])),
                             ],
                           ),
                         ),
-                      ),
-                    const SizedBox(height: 8),
-                    ElevatedButton.icon(
-                      onPressed: _showImageSourceDialog,
-                      icon: const Icon(Icons.add_a_photo),
-                      label: Text(_imageFile != null || (_isEdit && widget.entity!.image != null)
-                          ? 'Change Image'
-                          : 'Add Image'),
-                    ),
-                  ],
+                      );
+                    },
+                  ),
                 ),
               ),
+            SizedBox(height: 8),
+            ElevatedButton(
+              onPressed: _showImageSourceDialog,
+              child: Text(_imageFile != null || (_isEdit && widget.entity!.image != null)
+                  ? 'Change Image'
+                  : 'Add Image'),
             ),
-            const SizedBox(height: 24),
-
-            // Submit button
+            SizedBox(height: 24),
             ElevatedButton(
               onPressed: _isLoading ? null : _submitForm,
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
-              ),
               child: _isLoading
-                  ? const CircularProgressIndicator()
+                  ? CircularProgressIndicator()
                   : Text(_isEdit ? 'Update Entity' : 'Create Entity'),
             ),
           ],
@@ -458,6 +455,14 @@ class _EntityFormState extends State<EntityForm> {
 
   @override
   void dispose() {
+    // Clean up image files
+    if (_imageFile != null) {
+      _imageManager.cleanupTempFiles(_imageFile);
+    }
+    if (_previousImageFile != null) {
+      _imageManager.cleanupTempFiles(_previousImageFile);
+    }
+    
     _titleController.dispose();
     _latController.dispose();
     _lonController.dispose();

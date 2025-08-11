@@ -11,11 +11,6 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'GeoLoc App',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-        useMaterial3: true,
-      ),
       home: const MapView(),
       debugShowCheckedModeBanner: false,
     );

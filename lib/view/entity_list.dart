@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../model/entity.dart';
-import '../model/api_service.dart';
-import '../model/database_helper.dart';
+import '../modelView/entity_manager.dart';
 import 'entity_form.dart';
 
 class EntityList extends StatefulWidget {
@@ -12,11 +11,11 @@ class EntityList extends StatefulWidget {
 }
 
 class _EntityListState extends State<EntityList> {
-  final ApiService _apiService = ApiService();
-  final DatabaseHelper _databaseHelper = DatabaseHelper();
+  final EntityManager _entityManager = EntityManager();
   
   List<Entity> _entities = [];
   bool _isLoading = false;
+  bool _isDeleting = false;
   String _searchQuery = '';
 
   @override
@@ -31,39 +30,13 @@ class _EntityListState extends State<EntityList> {
     });
 
     try {
-      // Try to fetch from API first
-      final apiEntities = await _apiService.getAllEntities();
-      
-      if (apiEntities != null) {
-        // Update local database with API data
-        await _databaseHelper.deleteAllEntities();
-        for (final entity in apiEntities) {
-          await _databaseHelper.insertEntity(entity);
-        }
-        setState(() {
-          _entities = apiEntities;
-        });
-      } else {
-        // Fallback to local database if API fails
-        final localEntities = await _databaseHelper.getAllEntities();
-        setState(() {
-          _entities = localEntities;
-        });
-        
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Loaded from local storage (API unavailable)'),
-              backgroundColor: Colors.orange,
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      // Load from local database on error
-      final localEntities = await _databaseHelper.getAllEntities();
+      final entities = await _entityManager.loadEntities();
       setState(() {
-        _entities = localEntities;
+        _entities = entities;
+      });
+    } catch (e) {
+      setState(() {
+        _entities = [];
       });
       
       if (mounted) {
@@ -87,6 +60,8 @@ class _EntityListState extends State<EntityList> {
   }
 
   Future<void> _deleteEntity(Entity entity) async {
+    if (_isDeleting) return; // Prevent multiple simultaneous deletions
+    
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) {
@@ -109,48 +84,60 @@ class _EntityListState extends State<EntityList> {
     );
 
     if (confirmed == true) {
+      setState(() {
+        _isDeleting = true;
+      });
+      
+      // Show loading state
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Deleting entity...'),
+            duration: Duration(seconds: 1),
+          ),
+        );
+      }
+
       try {
-        // Delete from API
-        final success = await _apiService.deleteEntity(entity.id!);
+        final success = await _entityManager.deleteEntity(entity.id!);
         
         if (success) {
-          // Delete from local database
-          await _databaseHelper.deleteEntity(entity.id!);
-          
-          // Update UI
-          setState(() {
-            _entities.removeWhere((e) => e.id == entity.id);
-          });
+          // Add a small delay to allow image buffers to be released
+          await Future.delayed(const Duration(milliseconds: 100));
           
           if (mounted) {
+            setState(() {
+              _entities.removeWhere((e) => e.id == entity.id);
+            });
+            
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Entity deleted successfully')),
             );
           }
         } else {
-          // Try to delete from local database anyway
-          await _databaseHelper.deleteEntity(entity.id!);
-          setState(() {
-            _entities.removeWhere((e) => e.id == entity.id);
-          });
-          
           if (mounted) {
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Deleted locally (API unavailable)'),
-                backgroundColor: Colors.orange,
-              ),
+              const SnackBar(content: Text('Failed to delete entity')),
             );
           }
         }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error deleting entity: $e')),
-          );
+              } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Error deleting entity: $e')),
+            );
+          }
+        } finally {
+          if (mounted) {
+            setState(() {
+              _isDeleting = false;
+            });
+          }
         }
       }
-    }
   }
 
   void _showEntityDetails(Entity entity) {
@@ -186,12 +173,24 @@ class _EntityListState extends State<EntityList> {
                             child: Image.network(
                               entity.getFullImageUrl()!,
                               fit: BoxFit.contain,
+                              cacheWidth: 800, // Reasonable cache size
+                              cacheHeight: 600,
                               errorBuilder: (context, error, stackTrace) {
                                 return Container(
                                   height: 200,
                                   color: Colors.grey[200],
                                   child: const Center(
                                     child: Icon(Icons.error, size: 50),
+                                  ),
+                                );
+                              },
+                              loadingBuilder: (context, child, loadingProgress) {
+                                if (loadingProgress == null) return child;
+                                return Container(
+                                  height: 200,
+                                  color: Colors.grey[200],
+                                  child: const Center(
+                                    child: CircularProgressIndicator(),
                                   ),
                                 );
                               },
@@ -285,26 +284,13 @@ class _EntityListState extends State<EntityList> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Entity List'),
-        actions: [
-          IconButton(
-            onPressed: _loadEntities,
-            icon: const Icon(Icons.refresh),
-          ),
-        ],
-      ),
+      appBar: AppBar(title: Text('List')),
       body: Column(
         children: [
-          // Search bar
           Padding(
-            padding: const EdgeInsets.all(16.0),
+            padding: EdgeInsets.all(16.0),
             child: TextField(
-              decoration: const InputDecoration(
-                labelText: 'Search entities...',
-                prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(),
-              ),
+              decoration: InputDecoration(labelText: 'Search'),
               onChanged: (value) {
                 setState(() {
                   _searchQuery = value;
@@ -313,29 +299,21 @@ class _EntityListState extends State<EntityList> {
             ),
           ),
           
-          // Entity list
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? Center(child: CircularProgressIndicator())
                 : _filteredEntities.isEmpty
                     ? Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            const Icon(Icons.inbox, size: 64, color: Colors.grey),
-                            const SizedBox(height: 16),
-                            Text(
-                              _searchQuery.isEmpty
-                                  ? 'No entities found'
-                                  : 'No entities match your search',
-                              style: const TextStyle(fontSize: 16, color: Colors.grey),
-                            ),
-                            const SizedBox(height: 16),
+                            Text(_searchQuery.isEmpty
+                                ? 'No entities found'
+                                : 'No entities match your search'),
                             if (_searchQuery.isEmpty)
-                              ElevatedButton.icon(
+                              ElevatedButton(
                                 onPressed: _createEntity,
-                                icon: const Icon(Icons.add),
-                                label: const Text('Create First Entity'),
+                                child: Text('Create First Entity'),
                               ),
                           ],
                         ),
@@ -343,10 +321,12 @@ class _EntityListState extends State<EntityList> {
                     : RefreshIndicator(
                         onRefresh: _loadEntities,
                         child: ListView.builder(
+                          key: ValueKey(_filteredEntities.length), // Rebuild when count changes
                           itemCount: _filteredEntities.length,
                           itemBuilder: (context, index) {
                             final entity = _filteredEntities[index];
                             return Card(
+                              key: ValueKey('entity_${entity.id}'), // Unique key for each card
                               margin: const EdgeInsets.symmetric(
                                 horizontal: 16.0,
                                 vertical: 4.0,
@@ -360,12 +340,23 @@ class _EntityListState extends State<EntityList> {
                                           width: 60,
                                           height: 60,
                                           fit: BoxFit.cover,
+                                          cacheWidth: 120, // Limit cache size
+                                          cacheHeight: 120,
                                           errorBuilder: (context, error, stackTrace) {
                                             return Container(
                                               width: 60,
                                               height: 60,
                                               color: Colors.grey[300],
                                               child: const Icon(Icons.error),
+                                            );
+                                          },
+                                          loadingBuilder: (context, child, loadingProgress) {
+                                            if (loadingProgress == null) return child;
+                                            return Container(
+                                              width: 60,
+                                              height: 60,
+                                              color: Colors.grey[300],
+                                              child: const Icon(Icons.image),
                                             );
                                           },
                                         ),

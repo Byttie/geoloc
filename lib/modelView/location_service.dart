@@ -55,7 +55,6 @@ class LocationService {
 
       return _currentPosition;
     } catch (e) {
-      print('Error getting location: $e');
       return null;
     }
   }

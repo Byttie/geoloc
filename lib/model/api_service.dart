@@ -34,11 +34,9 @@ class ApiService {
       if (response.statusCode == 200 || response.statusCode == 201) {
         return json.decode(responseBody);
       } else {
-        print('Error creating entity: ${response.statusCode} - $responseBody');
         return null;
       }
     } catch (e) {
-      print('Exception in createEntity: $e');
       return null;
     }
   }
@@ -46,10 +44,8 @@ class ApiService {
   // Retrieve all entities - GET request
   Future<List<Entity>?> getAllEntities() async {
     try {
-      print('Fetching entities from: $baseUrl');
       final response = await http.get(Uri.parse(baseUrl));
       
-      print('API Response status: ${response.statusCode}');
       if (response.statusCode == 200) {
         final List<dynamic> jsonData = json.decode(response.body);
         final entities = jsonData.map((json) => Entity.fromJson(json)).toList();
@@ -60,14 +56,11 @@ class ApiService {
                  (entity.lat != 0.0 || entity.lon != 0.0);
         }).toList();
         
-        print('Parsed ${entities.length} entities, ${validEntities.length} valid');
         return validEntities;
       } else {
-        print('Error fetching entities: ${response.statusCode} - ${response.body}');
         return null;
       }
     } catch (e) {
-      print('Exception in getAllEntities: $e');
       return null;
     }
   }
@@ -100,7 +93,6 @@ class ApiService {
         if (response.statusCode == 200) {
           return json.decode(responseBody);
         } else {
-          print('Error updating entity with image: ${response.statusCode} - $responseBody');
           return null;
         }
       } else {
@@ -121,12 +113,10 @@ class ApiService {
         if (response.statusCode == 200) {
           return json.decode(response.body);
         } else {
-          print('Error updating entity: ${response.statusCode} - ${response.body}');
           return null;
         }
       }
     } catch (e) {
-      print('Exception in updateEntity: $e');
       return null;
     }
   }
@@ -144,7 +134,6 @@ class ApiService {
       
       return response.statusCode == 200;
     } catch (e) {
-      print('Exception in deleteEntity: $e');
       return false;
     }
   }
@@ -160,11 +149,9 @@ class ApiService {
         final Map<String, dynamic> jsonData = json.decode(response.body);
         return Entity.fromJson(jsonData);
       } else {
-        print('Error fetching entity by ID: ${response.statusCode} - ${response.body}');
         return null;
       }
     } catch (e) {
-      print('Exception in getEntityById: $e');
       return null;
     }
   }
@@ -177,7 +164,6 @@ class ApiService {
       );
       return response.statusCode == 200;
     } catch (e) {
-      print('API connection check failed: $e');
       return false;
     }
   }

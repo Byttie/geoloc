@@ -50,9 +50,6 @@ dependencies:
   # Image handling dependencies
   image_picker: ^1.0.7
   image: ^4.1.7
-  
-  # File handling
-  path_provider: ^2.1.2
 
 dev_dependencies:
   flutter_test:
