@@ -120,9 +120,9 @@ class _MapViewState extends State<MapView> {
     _mapController = controller;
     
     if (_currentPosition != null) {
-      controller.animateCamera(
+      controller.animateCamera( 
         _mapManager.getCameraUpdateForLocation(_currentPosition!),
-      );
+      ); //centres around the current position
     }
   }
 
@@ -198,7 +198,7 @@ class _MapViewState extends State<MapView> {
                   bottom: 80,
                   left: 16,
                   child: FloatingActionButton(
-                    heroTag: "location",
+                    heroTag: "location", 
                     mini: true,
                     onPressed: _getCurrentLocation,
                     child: Icon(Icons.my_location),

@@ -16,7 +16,6 @@ class _EntityListState extends State<EntityList> {
   
   List<Entity> _entities = [];
   bool _isLoading = false;
-  String _searchQuery = '';
 
   @override
   void initState() {
@@ -47,11 +46,7 @@ class _EntityListState extends State<EntityList> {
   }
 
   List<Entity> get _filteredEntities {
-    if (_searchQuery.isEmpty) {
-      return _entities;
-    }
-    return _entities.where((entity) =>
-        entity.title.toLowerCase().contains(_searchQuery.toLowerCase())).toList();
+    return _entities;
   }
 
   void _showEntityDetails(Entity entity) {
@@ -158,17 +153,6 @@ class _EntityListState extends State<EntityList> {
       appBar: AppBar(title: Text('List')),
       body: Column(
         children: [
-          Padding(
-            padding: EdgeInsets.all(16.0),
-            child: TextField(
-              decoration: InputDecoration(labelText: 'Search'),
-              onChanged: (value) {
-                setState(() {
-                  _searchQuery = value;
-                });
-              },
-            ),
-          ),
           
           Expanded(
             child: _isLoading
@@ -178,14 +162,7 @@ class _EntityListState extends State<EntityList> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Text(_searchQuery.isEmpty
-                                ? 'No entities found'
-                                : 'No entities match your search'),
-                            if (_searchQuery.isEmpty)
-                              ElevatedButton(
-                                onPressed: _createEntity,
-                                child: Text('Create First Entity'),
-                              ),
+                            Text('No entities found'),
                           ],
                         ),
                       )
@@ -235,10 +212,6 @@ class _EntityListState extends State<EntityList> {
                       ),
           ),
         ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _createEntity,
-        child: const Icon(Icons.add),
       ),
     );
   }

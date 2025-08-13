@@ -16,8 +16,8 @@ class MapManager {
     Set<Marker> markers = {};
     
     if (currentPosition != null) {
-      markers.add(
-        Marker(
+      markers.add( 
+        Marker( 
           markerId: const MarkerId('current_location'),
           position: LatLng(currentPosition.latitude, currentPosition.longitude),
           infoWindow: const InfoWindow(
