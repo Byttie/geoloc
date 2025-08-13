@@ -3,13 +3,11 @@ import 'package:geolocator/geolocator.dart';
 import '../model/entity.dart';
 
 class MapManager {
-  // Default location centered on Bangladesh
   static const CameraPosition defaultLocation = CameraPosition(
-    target: LatLng(23.8103, 90.4125), // Dhaka, Bangladesh
+    target: LatLng(23.8103, 90.4125),
     zoom: 7.0,
   );
 
-  // Create markers from entities and current position
   Set<Marker> createMarkers({
     required List<Entity> entities,
     Position? currentPosition,
@@ -17,7 +15,6 @@ class MapManager {
   }) {
     Set<Marker> markers = {};
     
-    // Add current location marker if available
     if (currentPosition != null) {
       markers.add(
         Marker(
@@ -31,7 +28,6 @@ class MapManager {
       );
     }
     
-    // Add entity markers
     for (final entity in entities) {
       markers.add(
         Marker(
@@ -51,7 +47,6 @@ class MapManager {
     return markers;
   }
 
-  // Get camera position for current location
   CameraPosition getCameraPositionForLocation(Position position) {
     return CameraPosition(
       target: LatLng(position.latitude, position.longitude),
@@ -59,7 +54,6 @@ class MapManager {
     );
   }
 
-  // Get camera update for position
   CameraUpdate getCameraUpdateForLocation(Position position) {
     return CameraUpdate.newCameraPosition(
       getCameraPositionForLocation(position),

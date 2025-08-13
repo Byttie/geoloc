@@ -6,7 +6,6 @@ import 'entity.dart';
 class ApiService {
   static const String baseUrl = 'https://labs.anontech.info/cse489/t3/api.php';
 
-  // Create Entity - POST request
   Future<Map<String, dynamic>?> createEntity({
     required String title,
     required double lat,
@@ -41,22 +40,15 @@ class ApiService {
     }
   }
 
-  // Retrieve all entities - GET request
   Future<List<Entity>?> getAllEntities() async {
     try {
       final response = await http.get(Uri.parse(baseUrl));
       
-      if (response.statusCode == 200) {
+            if (response.statusCode == 200) {
         final List<dynamic> jsonData = json.decode(response.body);
         final entities = jsonData.map((json) => Entity.fromJson(json)).toList();
         
-        // Filter out invalid entities (empty title, 0,0 coordinates)
-        final validEntities = entities.where((entity) {
-          return entity.title.isNotEmpty && 
-                 (entity.lat != 0.0 || entity.lon != 0.0);
-        }).toList();
-        
-        return validEntities;
+        return entities;
       } else {
         return null;
       }
@@ -65,7 +57,6 @@ class ApiService {
     }
   }
 
-  // Update Entity - PUT request
   Future<Map<String, dynamic>?> updateEntity({
     required int id,
     required String title,
@@ -75,7 +66,6 @@ class ApiService {
   }) async {
     try {
       if (imageFile != null) {
-        // If image is provided, use multipart form data
         var request = http.MultipartRequest('PUT', Uri.parse(baseUrl));
         
         request.fields['id'] = id.toString();
@@ -96,7 +86,6 @@ class ApiService {
           return null;
         }
       } else {
-        // If no image, use x-www-form-urlencoded format
         final response = await http.put(
           Uri.parse(baseUrl),
           headers: {
@@ -121,50 +110,5 @@ class ApiService {
     }
   }
 
-  // Delete Entity - DELETE request (assuming this endpoint exists)
-  Future<bool> deleteEntity(int id) async {
-    try {
-      final response = await http.delete(
-        Uri.parse(baseUrl),
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: json.encode({'id': id}),
-      );
-      
-      return response.statusCode == 200;
-    } catch (e) {
-      return false;
-    }
-  }
 
-  // Get Entity by ID (if needed)
-  Future<Entity?> getEntityById(int id) async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl?id=$id'),
-      );
-      
-      if (response.statusCode == 200) {
-        final Map<String, dynamic> jsonData = json.decode(response.body);
-        return Entity.fromJson(jsonData);
-      } else {
-        return null;
-      }
-    } catch (e) {
-      return null;
-    }
-  }
-
-  // Helper method to check if the API is reachable
-  Future<bool> checkApiConnection() async {
-    try {
-      final response = await http.get(Uri.parse(baseUrl)).timeout(
-        const Duration(seconds: 10),
-      );
-      return response.statusCode == 200;
-    } catch (e) {
-      return false;
-    }
-  }
 } 

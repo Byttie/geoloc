@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../model/entity.dart';
 import '../modelView/entity_manager.dart';
 import 'entity_form.dart';
+import '../utils/image_utils.dart';
 
 class EntityList extends StatefulWidget {
   const EntityList({super.key});
@@ -15,7 +16,6 @@ class _EntityListState extends State<EntityList> {
   
   List<Entity> _entities = [];
   bool _isLoading = false;
-  bool _isDeleting = false;
   String _searchQuery = '';
 
   @override
@@ -39,11 +39,6 @@ class _EntityListState extends State<EntityList> {
         _entities = [];
       });
       
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading entities: $e')),
-        );
-      }
     } finally {
       setState(() {
         _isLoading = false;
@@ -57,87 +52,6 @@ class _EntityListState extends State<EntityList> {
     }
     return _entities.where((entity) =>
         entity.title.toLowerCase().contains(_searchQuery.toLowerCase())).toList();
-  }
-
-  Future<void> _deleteEntity(Entity entity) async {
-    if (_isDeleting) return; // Prevent multiple simultaneous deletions
-    
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Delete Entity'),
-          content: Text('Are you sure you want to delete "${entity.title}"?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              style: TextButton.styleFrom(foregroundColor: Colors.red),
-              child: const Text('Delete'),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (confirmed == true) {
-      setState(() {
-        _isDeleting = true;
-      });
-      
-      // Show loading state
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Deleting entity...'),
-            duration: Duration(seconds: 1),
-          ),
-        );
-      }
-
-      try {
-        final success = await _entityManager.deleteEntity(entity.id!);
-        
-        if (success) {
-          // Add a small delay to allow image buffers to be released
-          await Future.delayed(const Duration(milliseconds: 100));
-          
-          if (mounted) {
-            setState(() {
-              _entities.removeWhere((e) => e.id == entity.id);
-            });
-            
-            ScaffoldMessenger.of(context).hideCurrentSnackBar();
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Entity deleted successfully')),
-            );
-          }
-        } else {
-          if (mounted) {
-            ScaffoldMessenger.of(context).hideCurrentSnackBar();
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Failed to delete entity')),
-            );
-          }
-        }
-              } catch (e) {
-          if (mounted) {
-            ScaffoldMessenger.of(context).hideCurrentSnackBar();
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Error deleting entity: $e')),
-            );
-          }
-        } finally {
-          if (mounted) {
-            setState(() {
-              _isDeleting = false;
-            });
-          }
-        }
-      }
   }
 
   void _showEntityDetails(Entity entity) {
@@ -165,37 +79,9 @@ class _EntityListState extends State<EntityList> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       if (entity.image != null && entity.image!.isNotEmpty)
-                        Container(
-                          width: double.infinity,
-                          constraints: const BoxConstraints(maxHeight: 400),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: Image.network(
-                              entity.getFullImageUrl()!,
-                              fit: BoxFit.contain,
-                              cacheWidth: 800, // Reasonable cache size
-                              cacheHeight: 600,
-                              errorBuilder: (context, error, stackTrace) {
-                                return Container(
-                                  height: 200,
-                                  color: Colors.grey[200],
-                                  child: const Center(
-                                    child: Icon(Icons.error, size: 50),
-                                  ),
-                                );
-                              },
-                              loadingBuilder: (context, child, loadingProgress) {
-                                if (loadingProgress == null) return child;
-                                return Container(
-                                  height: 200,
-                                  color: Colors.grey[200],
-                                  child: const Center(
-                                    child: CircularProgressIndicator(),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
+                        ImageDisplayUtils.buildNetworkImage(
+                          imageUrl: entity.getFullImageUrl()!,
+                          height: 400,
                         )
                       else
                         Container(
@@ -219,30 +105,15 @@ class _EntityListState extends State<EntityList> {
                       const SizedBox(height: 4),
                       Text('Longitude: ${entity.lon}'),
                       const SizedBox(height: 16),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          ElevatedButton.icon(
-                            onPressed: () {
-                              Navigator.pop(context);
-                              _editEntity(entity);
-                            },
-                            icon: const Icon(Icons.edit),
-                            label: const Text('Edit'),
-                          ),
-                          ElevatedButton.icon(
-                            onPressed: () {
-                              Navigator.pop(context);
-                              _deleteEntity(entity);
-                            },
-                            icon: const Icon(Icons.delete),
-                            label: const Text('Delete'),
-                            style: ElevatedButton.styleFrom(
-                              foregroundColor: Colors.white,
-                              backgroundColor: Colors.red,
-                            ),
-                          ),
-                        ],
+                      Center(
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _editEntity(entity);
+                          },
+                          icon: const Icon(Icons.edit),
+                          label: const Text('Edit'),
+                        ),
                       ),
                     ],
                   ),
@@ -264,7 +135,7 @@ class _EntityListState extends State<EntityList> {
     );
 
     if (result == true) {
-      _loadEntities(); // Refresh the list
+      _loadEntities();
     }
   }
 
@@ -277,7 +148,7 @@ class _EntityListState extends State<EntityList> {
     );
 
     if (result == true) {
-      _loadEntities(); // Refresh the list
+      _loadEntities();
     }
   }
 
@@ -321,45 +192,23 @@ class _EntityListState extends State<EntityList> {
                     : RefreshIndicator(
                         onRefresh: _loadEntities,
                         child: ListView.builder(
-                          key: ValueKey(_filteredEntities.length), // Rebuild when count changes
+                          key: ValueKey(_filteredEntities.length),
                           itemCount: _filteredEntities.length,
                           itemBuilder: (context, index) {
                             final entity = _filteredEntities[index];
                             return Card(
-                              key: ValueKey('entity_${entity.id}'), // Unique key for each card
+                              key: ValueKey('entity_${entity.id}'),
                               margin: const EdgeInsets.symmetric(
                                 horizontal: 16.0,
                                 vertical: 4.0,
                               ),
                               child: ListTile(
                                 leading: entity.image != null && entity.image!.isNotEmpty
-                                    ? ClipRRect(
-                                        borderRadius: BorderRadius.circular(8),
-                                        child: Image.network(
-                                          entity.getFullImageUrl()!,
-                                          width: 60,
-                                          height: 60,
-                                          fit: BoxFit.cover,
-                                          cacheWidth: 120, // Limit cache size
-                                          cacheHeight: 120,
-                                          errorBuilder: (context, error, stackTrace) {
-                                            return Container(
-                                              width: 60,
-                                              height: 60,
-                                              color: Colors.grey[300],
-                                              child: const Icon(Icons.error),
-                                            );
-                                          },
-                                          loadingBuilder: (context, child, loadingProgress) {
-                                            if (loadingProgress == null) return child;
-                                            return Container(
-                                              width: 60,
-                                              height: 60,
-                                              color: Colors.grey[300],
-                                              child: const Icon(Icons.image),
-                                            );
-                                          },
-                                        ),
+                                    ? ImageDisplayUtils.buildNetworkImage(
+                                        imageUrl: entity.getFullImageUrl()!,
+                                        height: 60,
+                                        width: 60,
+                                        fit: BoxFit.cover,
                                       )
                                     : Container(
                                         width: 60,
@@ -377,36 +226,6 @@ class _EntityListState extends State<EntityList> {
                                 subtitle: Text(
                                   'Lat: ${entity.lat.toStringAsFixed(4)}, '
                                   'Lon: ${entity.lon.toStringAsFixed(4)}',
-                                ),
-                                trailing: PopupMenuButton<String>(
-                                  onSelected: (value) {
-                                    switch (value) {
-                                      case 'edit':
-                                        _editEntity(entity);
-                                        break;
-                                      case 'delete':
-                                        _deleteEntity(entity);
-                                        break;
-                                    }
-                                  },
-                                  itemBuilder: (BuildContext context) => [
-                                    const PopupMenuItem<String>(
-                                      value: 'edit',
-                                      child: ListTile(
-                                        leading: Icon(Icons.edit),
-                                        title: Text('Edit'),
-                                        contentPadding: EdgeInsets.zero,
-                                      ),
-                                    ),
-                                    const PopupMenuItem<String>(
-                                      value: 'delete',
-                                      child: ListTile(
-                                        leading: Icon(Icons.delete, color: Colors.red),
-                                        title: Text('Delete', style: TextStyle(color: Colors.red)),
-                                        contentPadding: EdgeInsets.zero,
-                                      ),
-                                    ),
-                                  ],
                                 ),
                                 onTap: () => _showEntityDetails(entity),
                               ),

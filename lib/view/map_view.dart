@@ -7,6 +7,7 @@ import '../modelView/map_manager.dart';
 import '../model/entity.dart';
 import 'entity_form.dart';
 import 'entity_list.dart';
+import '../utils/image_utils.dart';
 
 class MapView extends StatefulWidget {
   const MapView({super.key});
@@ -16,14 +17,14 @@ class MapView extends StatefulWidget {
 }
 
 class _MapViewState extends State<MapView> {
-  GoogleMapController? _mapController;
-  final LocationService _locationService = LocationService();
-  final EntityManager _entityManager = EntityManager();
+  GoogleMapController? _mapController; 
+  final LocationService _locationService = LocationService(); 
+  final EntityManager _entityManager = EntityManager(); 
   final MapManager _mapManager = MapManager();
   Position? _currentPosition;
-  Set<Marker> _markers = {};
+  Set<Marker> _markers = {}; 
   List<Entity> _entities = [];
-  bool _isLoading = true;
+  bool _isLoading = true; 
 
   @override
   void initState() {
@@ -32,30 +33,23 @@ class _MapViewState extends State<MapView> {
     _loadEntities();
   }
 
-  Future<void> _getCurrentLocation() async {
+  Future<void> _getCurrentLocation() async { 
     setState(() {
       _isLoading = true;
     });
 
     try {
       final position = await _locationService.getCurrentLocation();
-      if (position != null) {
-        setState(() {
-          _currentPosition = position;
-          _isLoading = false;
-        });
-        _updateEntityMarkers();
+      setState(() {
+        _currentPosition = position;
+        _isLoading = false;
+      });
+      _updateEntityMarkers();
 
-        // Move camera to current location
-        if (_mapController != null) {
-          _mapController!.animateCamera(
-            _mapManager.getCameraUpdateForLocation(position),
-          );
-        }
-      } else {
-        setState(() {
-          _isLoading = false;
-        });
+              if (_mapController != null) {
+        _mapController!.animateCamera(
+          _mapManager.getCameraUpdateForLocation(position),
+        );
       }
     } catch (e) {
       setState(() {
@@ -72,14 +66,6 @@ class _MapViewState extends State<MapView> {
       });
       _updateEntityMarkers();
       
-      if (mounted && entities.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('No entities found. Create some entities first!'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
     } catch (e) {
       setState(() {
         _entities = [];
@@ -109,14 +95,9 @@ class _MapViewState extends State<MapView> {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (entity.image != null && entity.image!.isNotEmpty)
-              GestureDetector(
-                onTap: () => _showFullScreenImage(entity),
-                child: Image.network(
-                  entity.getFullImageUrl()!,
-                  height: 150,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => Icon(Icons.error),
-                ),
+              ImageDisplayUtils.buildNetworkImage(
+                imageUrl: entity.getFullImageUrl()!,
+                height: 150,
               ),
             SizedBox(height: 8),
             Text('Lat: ${entity.lat}'),
@@ -133,29 +114,11 @@ class _MapViewState extends State<MapView> {
     );
   }
 
-  void _showFullScreenImage(Entity entity) {
-    Navigator.pop(context);
-    showDialog(
-      context: context,
-      builder: (context) => Dialog.fullscreen(
-        child: Scaffold(
-          appBar: AppBar(title: Text(entity.title)),
-          body: Center(
-            child: Image.network(
-              entity.getFullImageUrl()!,
-              fit: BoxFit.contain,
-              errorBuilder: (context, error, stackTrace) => Icon(Icons.error),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+
 
   void _onMapCreated(GoogleMapController controller) {
     _mapController = controller;
     
-    // If we already have current position, move camera to it
     if (_currentPosition != null) {
       controller.animateCamera(
         _mapManager.getCameraUpdateForLocation(_currentPosition!),
@@ -173,7 +136,7 @@ class _MapViewState extends State<MapView> {
     );
 
     if (result == true) {
-      _loadEntities(); // Refresh entities after creation
+      _loadEntities();
     }
   }
 
@@ -186,7 +149,7 @@ class _MapViewState extends State<MapView> {
     );
 
     if (result == true) {
-      _loadEntities(); // Refresh entities after any changes
+      _loadEntities();
     }
   }
 

@@ -1,122 +1,10 @@
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import '../model/entity.dart';
 import '../modelView/location_service.dart';
 import '../modelView/entity_manager.dart';
 import '../modelView/image_manager.dart';
 
-// Custom memory-efficient image widget
-class MemoryEfficientImage extends StatefulWidget {
-  final File imageFile;
-  final double height;
-  final BoxFit fit;
-
-  const MemoryEfficientImage({
-    super.key,
-    required this.imageFile,
-    this.height = 200,
-    this.fit = BoxFit.cover,
-  });
-
-  @override
-  State<MemoryEfficientImage> createState() => _MemoryEfficientImageState();
-}
-
-class _MemoryEfficientImageState extends State<MemoryEfficientImage> {
-  Uint8List? _imageBytes;
-  bool _isLoading = true;
-  bool _hasError = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadImageBytes();
-  }
-
-  Future<void> _loadImageBytes() async {
-    try {
-      if (await widget.imageFile.exists()) {
-        final bytes = await widget.imageFile.readAsBytes();
-        if (mounted) {
-          setState(() {
-            _imageBytes = bytes;
-            _isLoading = false;
-            _hasError = false;
-          });
-        }
-      } else {
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-            _hasError = true;
-          });
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _hasError = true;
-        });
-      }
-    }
-  }
-
-  @override
-  void dispose() {
-    _imageBytes = null; // Release memory
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: widget.height,
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: Colors.grey[300],
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: _isLoading
-            ? Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    CircularProgressIndicator(),
-                    SizedBox(height: 8),
-                    Text('Loading...', style: TextStyle(color: Colors.grey[600])),
-                  ],
-                ),
-              )
-            : _hasError || _imageBytes == null
-                ? Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.error, size: 50, color: Colors.grey[600]),
-                      Text('Failed to load image', style: TextStyle(color: Colors.grey[600])),
-                    ],
-                  )
-                : Image.memory(
-                    _imageBytes!,
-                    fit: widget.fit,
-                    cacheWidth: 200, // Minimal cache
-                    cacheHeight: 150,
-                    gaplessPlayback: true,
-                    errorBuilder: (context, error, stackTrace) => Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.error, size: 50, color: Colors.grey[600]),
-                        Text('Error displaying image', style: TextStyle(color: Colors.grey[600])),
-                      ],
-                    ),
-                  ),
-      ),
-    );
-  }
-}
 
 class EntityForm extends StatefulWidget {
   final Entity? entity;
@@ -138,14 +26,13 @@ class _EntityFormState extends State<EntityForm> {
   final ImageManager _imageManager = ImageManager();
   
   File? _imageFile;
-  File? _previousImageFile; // Keep track for cleanup
   bool _isLoading = false;
   bool _isEdit = false;
 
   @override
   void initState() {
-    super.initState();
-    _isEdit = widget.entity != null;
+    super.initState(); 
+    _isEdit = widget.entity != null; 
     
     if (_isEdit) {
       _titleController.text = widget.entity!.title;
@@ -170,11 +57,7 @@ class _EntityFormState extends State<EntityForm> {
         });
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error getting location: $e')),
-        );
-      }
+      // Silently handle location errors
     } finally {
       setState(() {
         _isLoading = false;
@@ -186,22 +69,12 @@ class _EntityFormState extends State<EntityForm> {
     try {
       final imageFile = await _imageManager.pickImageFromGallery();
       if (imageFile != null) {
-        // Clean up previous image file
-        if (_previousImageFile != null) {
-          await _imageManager.cleanupTempFiles(_previousImageFile);
-        }
-        
         setState(() {
-          _previousImageFile = _imageFile;
           _imageFile = imageFile;
         });
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error picking image: $e')),
-        );
-      }
+      // Silently handle image picking errors
     }
   }
 
@@ -209,22 +82,12 @@ class _EntityFormState extends State<EntityForm> {
     try {
       final imageFile = await _imageManager.takePhoto();
       if (imageFile != null) {
-        // Clean up previous image file
-        if (_previousImageFile != null) {
-          await _imageManager.cleanupTempFiles(_previousImageFile);
-        }
-        
         setState(() {
-          _previousImageFile = _imageFile;
           _imageFile = imageFile;
         });
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error taking photo: $e')),
-        );
-      }
+      // Silently handle camera errors
     }
   }
 
@@ -277,8 +140,7 @@ class _EntityFormState extends State<EntityForm> {
           title: title,
           lat: lat,
           lon: lon,
-          imageFile: _imageFile,
-          currentImage: widget.entity!.image,
+          imageFile: null,
         );
       } else {
         success = await _entityManager.createEntity(
@@ -291,32 +153,16 @@ class _EntityFormState extends State<EntityForm> {
 
       if (mounted) {
         if (success) {
-          // Clean up image files after successful submission
-          if (_imageFile != null) {
+          if (!_isEdit && _imageFile != null) {
             _imageManager.cleanupTempFiles(_imageFile);
             _imageFile = null;
           }
-          if (_previousImageFile != null) {
-            _imageManager.cleanupTempFiles(_previousImageFile);
-            _previousImageFile = null;
-          }
           
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(_isEdit ? 'Entity updated successfully' : 'Entity created successfully')),
-          );
           Navigator.pop(context, true);
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(_isEdit ? 'Failed to update entity' : 'Failed to create entity')),
-          );
         }
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
-      }
+      // Silently handle submission errors
     } finally {
       if (mounted) {
         setState(() {
@@ -390,8 +236,6 @@ class _EntityFormState extends State<EntityForm> {
             ),
             SizedBox(height: 16),
             if (_imageFile != null)
-              MemoryEfficientImage(imageFile: _imageFile!)
-            else if (_isEdit && widget.entity!.image != null)
               Container(
                 height: 200,
                 width: double.infinity,
@@ -401,45 +245,15 @@ class _EntityFormState extends State<EntityForm> {
                 ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(8),
-                  child: Image.network(
-                    widget.entity!.getFullImageUrl()!,
-                    fit: BoxFit.cover,
-                    cacheWidth: 150, // Minimal cache
-                    cacheHeight: 113,
-                    errorBuilder: (context, error, stackTrace) => Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.error, size: 50, color: Colors.grey[600]),
-                        Text('Failed to load image', style: TextStyle(color: Colors.grey[600])),
-                      ],
-                    ),
-                    loadingBuilder: (context, child, loadingProgress) {
-                      if (loadingProgress == null) return child;
-                      return Container(
-                        height: 200,
-                        color: Colors.grey[300],
-                        child: Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              CircularProgressIndicator(),
-                              SizedBox(height: 8),
-                              Text('Loading image...', style: TextStyle(color: Colors.grey[600])),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
+                  child: Image.file(_imageFile!, fit: BoxFit.cover),
                 ),
               ),
             SizedBox(height: 8),
-            ElevatedButton(
-              onPressed: _showImageSourceDialog,
-              child: Text(_imageFile != null || (_isEdit && widget.entity!.image != null)
-                  ? 'Change Image'
-                  : 'Add Image'),
-            ),
+            if (!_isEdit)
+              ElevatedButton(
+                onPressed: _showImageSourceDialog,
+                child: Text('Add Image'),
+              ),
             SizedBox(height: 24),
             ElevatedButton(
               onPressed: _isLoading ? null : _submitForm,
@@ -455,12 +269,8 @@ class _EntityFormState extends State<EntityForm> {
 
   @override
   void dispose() {
-    // Clean up image files
     if (_imageFile != null) {
       _imageManager.cleanupTempFiles(_imageFile);
-    }
-    if (_previousImageFile != null) {
-      _imageManager.cleanupTempFiles(_previousImageFile);
     }
     
     _titleController.dispose();
