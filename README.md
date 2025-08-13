@@ -1,16 +1,21 @@
-# geoloc
+Name: Ragib Rawnak
+ID: 23101346
+Email: ragib.rawnak@g.bracu.ac.bd
+Project Name: geoloc
+Tools: Flutter
 
-A new Flutter project.
+Project Features
 
-## Getting Started
+1. A project that lets you View the map contating differnt entites.
+2. GPS module to track your current location
+3. You can Create or Update Entities
 
-This project is a starting point for a Flutter application.
+How to run?
 
-A few resources to get you started if this is your first Flutter project:
+1. run "flutter pub get"
+2. navigate to geloc directory and run "flutter run"
+3. Use and external device or emulator for debugging
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+
+
