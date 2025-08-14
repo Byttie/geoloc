@@ -10,7 +10,7 @@ class ImageManager {
     try {
       final XFile? image = await _picker.pickImage(
         source: ImageSource.gallery,
-        maxWidth: 1024,
+        maxWidth: 1024, 
         maxHeight: 768,
         imageQuality: 80,
         requestFullMetadata: false,
@@ -45,7 +45,7 @@ class ImageManager {
     }
   }
 
-  Future<File> _processImage(XFile xFile) async {
+  Future<File> _processImage(XFile xFile) async { 
     File? processedFile;
     Uint8List? bytes;
     img.Image? originalImage;
@@ -60,15 +60,15 @@ class ImageManager {
         return File(xFile.path);
       }
 
-      double aspectRatio = originalImage.width / originalImage.height;
+      double aspectRatio = originalImage.width / originalImage.height; //landscape or portrait
       int newWidth, newHeight;
       
       if (aspectRatio > 1) {
         newWidth = 800;
-        newHeight = (800 / aspectRatio).round();
+        newHeight = (800 / aspectRatio).round(); 
       } else {
         newHeight = 600;
-        newWidth = (600 * aspectRatio).round();
+        newWidth = (600 * aspectRatio).round(); 
       }
 
       resizedImage = img.copyResize(
@@ -97,7 +97,7 @@ class ImageManager {
     }
   }
 
-  Future<void> cleanupTempFiles(File? imageFile) async {
+  Future<void> cleanupTempFiles(File? imageFile) async { 
     if (imageFile != null && await imageFile.exists()) {
       try {
         await imageFile.delete();

@@ -45,10 +45,6 @@ class _EntityListState extends State<EntityList> {
     }
   }
 
-  List<Entity> get _filteredEntities {
-    return _entities;
-  }
-
   void _showEntityDetails(Entity entity) {
     showDialog(
       context: context,
@@ -134,18 +130,7 @@ class _EntityListState extends State<EntityList> {
     }
   }
 
-  void _createEntity() async {
-    final result = await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const EntityForm(),
-      ),
-    );
 
-    if (result == true) {
-      _loadEntities();
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -153,63 +138,53 @@ class _EntityListState extends State<EntityList> {
       appBar: AppBar(title: Text('List')),
       body: Column(
         children: [
-          
           Expanded(
             child: _isLoading
                 ? Center(child: CircularProgressIndicator())
-                : _filteredEntities.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text('No entities found'),
-                          ],
-                        ),
-                      )
-                    : RefreshIndicator(
-                        onRefresh: _loadEntities,
-                        child: ListView.builder(
-                          key: ValueKey(_filteredEntities.length),
-                          itemCount: _filteredEntities.length,
-                          itemBuilder: (context, index) {
-                            final entity = _filteredEntities[index];
-                            return Card(
-                              key: ValueKey('entity_${entity.id}'),
-                              margin: const EdgeInsets.symmetric(
-                                horizontal: 16.0,
-                                vertical: 4.0,
-                              ),
-                              child: ListTile(
-                                leading: entity.image != null && entity.image!.isNotEmpty
-                                    ? ImageDisplayUtils.buildNetworkImage(
-                                        imageUrl: entity.getFullImageUrl()!,
-                                        height: 60,
-                                        width: 60,
-                                        fit: BoxFit.cover,
-                                      )
-                                    : Container(
-                                        width: 60,
-                                        height: 60,
-                                        decoration: BoxDecoration(
-                                          color: Colors.grey[300],
-                                          borderRadius: BorderRadius.circular(8),
-                                        ),
-                                        child: const Icon(Icons.image),
-                                      ),
-                                title: Text(
-                                  entity.title,
-                                  style: const TextStyle(fontWeight: FontWeight.bold),
-                                ),
-                                subtitle: Text(
-                                  'Lat: ${entity.lat.toStringAsFixed(4)}, '
-                                  'Lon: ${entity.lon.toStringAsFixed(4)}',
-                                ),
-                                onTap: () => _showEntityDetails(entity),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
+                : RefreshIndicator(
+                    onRefresh: _loadEntities,
+                    child: ListView.builder(
+                      key: ValueKey(_entities.length),
+                      itemCount: _entities.length,
+                      itemBuilder: (context, index) {
+                        final entity = _entities[index];
+                        return Card(
+                          key: ValueKey('entity_${entity.id}'),
+                          margin: const EdgeInsets.symmetric(
+                            horizontal: 16.0,
+                            vertical: 4.0,
+                          ),
+                          child: ListTile(
+                            leading: entity.image != null && entity.image!.isNotEmpty
+                                ? ImageDisplayUtils.buildNetworkImage(
+                                    imageUrl: entity.getFullImageUrl()!,
+                                    height: 60,
+                                    width: 60,
+                                    fit: BoxFit.cover,
+                                  )
+                                : Container(
+                                    width: 60,
+                                    height: 60,
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey[300],
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: const Icon(Icons.image),
+                                  ),
+                            title: Text(
+                              entity.title,
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            subtitle: Text(
+                              'Lat: ${entity.lat.toStringAsFixed(4)}, '
+                              'Lon: ${entity.lon.toStringAsFixed(4)}',
+                            ),
+                            onTap: () => _showEntityDetails(entity),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
           ),
         ],
       ),
